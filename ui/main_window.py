@@ -5,7 +5,7 @@ from PyQt6.QtCore import QThread
 from workers.sensor_worker import SensorWorker
 from core.data_processor import DataProcessor
 from core.plot_manager import PlotManager
-from algorithm.rls_flt_disp import RealTimeAccelerationIntegrator
+from algorithm.kinematic_processor import KinematicProcessor
 from ui.display_screen import DisplayScreenWidget
 from ui.sensor_management_screen import SensorManagementScreenWidget
 from ui.settings_screen import SettingsScreenWidget
@@ -60,23 +60,26 @@ class MainWindow(QMainWindow):
         self.sample_frame_size_integrator = 20
 
         self.integrators = {
-            'x': RealTimeAccelerationIntegrator(
+            'x': KinematicProcessor(
+                dt=dt_sensor,
                 sample_frame_size=self.sample_frame_size_integrator,
                 calc_frame_multiplier=calc_multiplier_val,
-                dt=dt_sensor,
-                filter_q=q_filter
+                rls_filter_q_vel=q_filter,
+                rls_filter_q_disp=q_filter
             ),
-            'y': RealTimeAccelerationIntegrator(
+            'y': KinematicProcessor(
+                dt=dt_sensor,
                 sample_frame_size=self.sample_frame_size_integrator,
                 calc_frame_multiplier=calc_multiplier_val,
-                dt=dt_sensor,
-                filter_q=q_filter
+                rls_filter_q_vel=q_filter,
+                rls_filter_q_disp=q_filter
             ),
-            'z': RealTimeAccelerationIntegrator(
+            'z': KinematicProcessor(
+                dt=dt_sensor,
                 sample_frame_size=self.sample_frame_size_integrator,
                 calc_frame_multiplier=calc_multiplier_val,
-                dt=dt_sensor,
-                filter_q=q_filter
+                rls_filter_q_vel=q_filter,
+                rls_filter_q_disp=q_filter
             )
         }
         logger.info(f"Đã khởi tạo các bộ tích hợp với dt={dt_sensor}")
