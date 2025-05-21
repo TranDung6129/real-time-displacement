@@ -13,6 +13,7 @@ import psutil
 import json
 import uuid
 import pyqtgraph as pg
+import serial.tools.list_ports
 
 logger = logging.getLogger(__name__)
 
@@ -145,16 +146,28 @@ class AddSensorDialog(QDialog):
         protocol = self.protocol_combo.currentText()
 
         if protocol == "UART":
-            self.port_input = QLineEdit()
-            self.port_input.setPlaceholderText("Ví dụ: COM3 hoặc /dev/ttyUSB0")
-            self.connection_details_layout.addRow("Cổng COM (*):", self.port_input)
-            self.current_connection_widgets['port_address'] = self.port_input
+            # Tạo QHBoxLayout để chứa ComboBox và Button
+            port_entry_layout = QHBoxLayout()
+            
+            self.port_combo = QComboBox()
+            self.port_combo.setMinimumWidth(200)
+            self.refresh_ports_button = QPushButton("Làm mới")
+            self.refresh_ports_button.clicked.connect(self.refresh_com_ports)
+
+            port_entry_layout.addWidget(self.port_combo)
+            port_entry_layout.addWidget(self.refresh_ports_button)
+            port_entry_layout.addStretch(1)
+
+            self.connection_details_layout.addRow("Cổng COM (*):", port_entry_layout)
+            
+            self.current_connection_widgets['port_address'] = self.port_combo
             
             self.baudrate_input = QComboBox()
             self.baudrate_input.addItems(["9600", "19200", "38400", "57600", "115200", "230400", "460800", "921600"])
             self.baudrate_input.setCurrentText("115200")
             self.connection_details_layout.addRow("Tốc độ Baud (*):", self.baudrate_input)
             self.current_connection_widgets['baudrate'] = self.baudrate_input
+
         elif protocol in ["TCP/IP", "UDP"]:
             self.ip_address_input = QLineEdit()
             self.ip_address_input.setPlaceholderText("Ví dụ: 192.168.1.100")
@@ -173,6 +186,20 @@ class AddSensorDialog(QDialog):
         elif protocol == "Mock":
              self.connection_details_layout.addRow(QLabel("Cảm biến Mock không yêu cầu chi tiết kết nối."))
         self.connection_details_group.setVisible(self.connection_details_layout.rowCount() > 0)
+
+    def refresh_com_ports(self):
+        """Refresh the list of available COM ports"""
+        self.port_combo.clear()
+        ports = serial.tools.list_ports.comports()
+        found = False
+        if ports:
+            for port in ports:
+                # Bỏ qua các cổng có mô tả chứa 'n/a' (không phân biệt hoa thường)
+                if port.device.startswith(('COM', '/dev/tty')) and 'n/a' not in port.description.lower():
+                    self.port_combo.addItem(f"{port.device} - {port.description}", port.device)
+                    found = True
+        if not found:
+            self.port_combo.addItem("Không tìm thấy cổng COM khả dụng", "")
 
     def _update_specific_config_fields(self):
         self._clear_layout(self.specific_config_layout)
@@ -213,8 +240,8 @@ class AddSensorDialog(QDialog):
 
         protocol = self.protocol_combo.currentText()
         if protocol == "UART":
-            if not self.current_connection_widgets['port_address'].text().strip():
-                QMessageBox.warning(self, "Thiếu thông tin", "Vui lòng nhập Cổng COM cho UART.")
+            if not self.current_connection_widgets['port_address'].currentData():
+                QMessageBox.warning(self, "Thiếu thông tin", "Vui lòng chọn Cổng COM cho UART.")
                 return
         elif protocol in ["TCP/IP", "UDP"]:
             if not self.current_connection_widgets['ip_address'].text().strip() or \
@@ -246,7 +273,7 @@ class AddSensorDialog(QDialog):
 
         protocol = config["protocol"]
         if protocol == "UART":
-            config['port'] = self.current_connection_widgets['port_address'].text().strip()
+            config['port'] = self.current_connection_widgets['port_address'].currentData()
             config['baudrate'] = int(self.current_connection_widgets['baudrate'].currentText())
         elif protocol in ["TCP/IP", "UDP"]:
             ip = self.current_connection_widgets['ip_address'].text().strip()

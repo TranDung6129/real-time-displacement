@@ -339,8 +339,14 @@ class AdvancedAnalysisScreenWidget(QWidget):
             return
 
         raw_data_from_dp = self.data_processor.get_plot_data_for_sensor(self.current_sensor_id)
-        if not raw_data_from_dp or not raw_data_from_dp['time_data'].size:
-            self.current_data_snapshot = None
+        if not raw_data_from_dp:
+            self.current_data_snapshot = {
+                'time': np.array([]),
+                'acc_data': {'x': np.array([]), 'y': np.array([]), 'z': np.array([])},
+                'vel_data': {'x': np.array([]), 'y': np.array([]), 'z': np.array([])},
+                'disp_data': {'x': np.array([]), 'y': np.array([]), 'z': np.array([])},
+                'fft_data': {'x': np.array([]), 'y': np.array([]), 'z': np.array([])}
+            }
             QMessageBox.warning(self, "Cảnh báo", "Không có dữ liệu từ DataProcessor.")
             self.clear_all_analysis_outputs()
             return
@@ -348,47 +354,42 @@ class AdvancedAnalysisScreenWidget(QWidget):
         num_points_to_use = self.num_data_points_spinbox.value()
         self.current_data_snapshot = {}
         
-        time_data_full = raw_data_from_dp['time_data']
+        # Initialize time data
+        time_data_full = raw_data_from_dp.get('time_data', np.array([]))
         actual_num_points = min(num_points_to_use, len(time_data_full))
-        if actual_num_points == 0:
-            self.current_data_snapshot = None
-            QMessageBox.warning(self, "Cảnh báo", "Không có điểm dữ liệu nào sau khi cắt.")
-            self.clear_all_analysis_outputs()
-            return
+        self.current_data_snapshot['time'] = np.copy(time_data_full[-actual_num_points:]) if actual_num_points > 0 else np.array([])
 
-        self.current_data_snapshot['time'] = np.copy(time_data_full[-actual_num_points:])
-
-        # Các trường dữ liệu chính
-        for dtype_key, data_map in {'acc': raw_data_from_dp['acc_data'],
-                                   'vel': raw_data_from_dp['vel_data'],
-                                   'disp': raw_data_from_dp['disp_data']}.items():
-            for axis_key, axis_data_full in data_map.items():
+        # Initialize main data fields
+        for dtype_key, data_map in {'acc': raw_data_from_dp.get('acc_data', {}),
+                                   'vel': raw_data_from_dp.get('vel_data', {}),
+                                   'disp': raw_data_from_dp.get('disp_data', {})}.items():
+            for axis_key in ['x', 'y', 'z']:
                 field_name = f"{dtype_key.capitalize()}{axis_key.upper()}"
+                axis_data_full = data_map.get(axis_key, np.array([]))
                 if len(axis_data_full) >= actual_num_points:
                     self.current_data_snapshot[field_name] = np.copy(axis_data_full[-actual_num_points:])
-                elif len(axis_data_full) > 0 : # Nếu có ít hơn số điểm yêu cầu nhưng vẫn có dữ liệu
+                elif len(axis_data_full) > 0:
                     self.current_data_snapshot[field_name] = np.copy(axis_data_full)
                 else:
                     self.current_data_snapshot[field_name] = np.array([])
 
-        # Dữ liệu gia tốc thô cho FFT
+        # Initialize FFT data
+        fft_data = raw_data_from_dp.get('fft_data', {})
         for axis in ['x', 'y', 'z']:
-            if axis in raw_data_from_dp['fft_data']:
-                field_name = f"RawAcc{axis.upper()}_for_fft"
-                if raw_data_from_dp['fft_data'][axis]['freq'] is not None:
-                    self.current_data_snapshot[field_name] = np.copy(raw_data_from_dp['fft_data'][axis]['freq'])
-                else:
-                    self.current_data_snapshot[field_name] = np.array([])
+            field_name = f"RawAcc{axis.upper()}_for_fft"
+            if axis in fft_data and fft_data[axis].get('freq') is not None:
+                self.current_data_snapshot[field_name] = np.copy(fft_data[axis]['freq'])
+            else:
+                self.current_data_snapshot[field_name] = np.array([])
 
         print(f"Đã tải {actual_num_points} điểm dữ liệu để phân tích.")
         
-        # Cập nhật các combobox chọn trường nếu danh sách selected_analysis_fields rỗng
+        # Update field selectors
         if not self.selected_analysis_fields:
             all_available_snapshot_keys = [k for k in self.current_data_snapshot.keys() if k != 'time']
-            self.update_selected_analysis_fields(all_available_snapshot_keys) # Chọn tất cả mặc định nếu chưa chọn gì
+            self.update_selected_analysis_fields(all_available_snapshot_keys)
         else:
-            # Gọi lại để cập nhật combobox nếu selected_analysis_fields đã có từ trước
-             self.update_selected_analysis_fields(self.selected_analysis_fields)
+            self.update_selected_analysis_fields(self.selected_analysis_fields)
 
         self.on_tab_changed(self.analysis_tabs.currentIndex())
 
@@ -408,8 +409,16 @@ class AdvancedAnalysisScreenWidget(QWidget):
 
     def get_selected_data_from_snapshot(self):
         """Lấy dữ liệu từ snapshot dựa trên self.selected_analysis_fields, đảm bảo tất cả các trường có cùng độ dài nhỏ nhất."""
-        if self.current_data_snapshot is None or not self.selected_analysis_fields:
+        if self.current_data_snapshot is None:
             return None, None
+
+        if not self.selected_analysis_fields:
+            # Nếu không có trường nào được chọn, trả về tất cả các trường có sẵn
+            available_fields = [k for k in self.current_data_snapshot.keys() if k != 'time']
+            if not available_fields:
+                return None, None
+            self.update_selected_analysis_fields(available_fields)
+            self.selected_analysis_fields = available_fields
 
         # Tìm min_len của tất cả các trường được chọn (kể cả time)
         lengths = [self.current_data_snapshot.get('time', np.array([])).size]
@@ -418,13 +427,15 @@ class AdvancedAnalysisScreenWidget(QWidget):
                 lengths.append(self.current_data_snapshot[field_key].size)
         min_len = min(lengths) if lengths else 0
 
+        # Nếu min_len = 0, trả về các mảng rỗng thay vì None
+        if min_len == 0:
+            empty_data = {field_key: np.array([]) for field_key in self.selected_analysis_fields}
+            return np.array([]), empty_data
+
         data_to_analyze = {}
         for field_key in self.selected_analysis_fields:
-            if field_key in self.current_data_snapshot and self.current_data_snapshot[field_key].size >= min_len and min_len > 0:
+            if field_key in self.current_data_snapshot:
                 data_to_analyze[field_key] = self.current_data_snapshot[field_key][:min_len]
-
-        if not data_to_analyze:
-            return None, None
 
         time_vector = self.current_data_snapshot['time'][:min_len] if 'time' in self.current_data_snapshot else np.array([])
         return time_vector, data_to_analyze
@@ -438,8 +449,13 @@ class AdvancedAnalysisScreenWidget(QWidget):
 
         time_vector, data_for_current_tab = self.get_selected_data_from_snapshot()
 
-        if data_for_current_tab is None or (time_vector is not None and time_vector.size == 0):
+        if data_for_current_tab is None:
             QMessageBox.warning(self, "Cảnh báo", "Không có dữ liệu hợp lệ được chọn hoặc tải để phân tích.")
+            self.clear_all_analysis_outputs()
+            return
+
+        # Nếu dữ liệu rỗng, chỉ cần xóa các kết quả phân tích và không hiển thị cảnh báo
+        if time_vector.size == 0 or all(data.size == 0 for data in data_for_current_tab.values()):
             self.clear_all_analysis_outputs()
             return
 
