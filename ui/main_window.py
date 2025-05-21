@@ -9,6 +9,7 @@ from algorithm.kinematic_processor import KinematicProcessor
 from ui.display_screen import DisplayScreenWidget
 from ui.sensor_management_screen import SensorManagementScreenWidget
 from ui.settings_screen import SettingsScreenWidget
+from ui.advanced_analysis_screen import AdvancedAnalysisScreenWidget
 
 logger = logging.getLogger(__name__)
 
@@ -22,35 +23,39 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(self.central_widget)
         self.layout = QVBoxLayout(self.central_widget)
 
-        # Khởi tạo các thành phần UI
+        # Initialize data processing components first
+        self.data_processor = DataProcessor()
+
+        # Initialize UI components
         self.tabs = QTabWidget()
         self.display_screen = DisplayScreenWidget()
         self.sensor_screen = SensorManagementScreenWidget()
         self.settings_screen = SettingsScreenWidget()
+        self.advanced_analysis_screen = AdvancedAnalysisScreenWidget(self.data_processor)
+
+        # Initialize plot manager after display_screen is created
+        self.plot_manager = PlotManager(self.display_screen, self.data_processor)
 
         self.tabs.addTab(self.display_screen, "Hiển thị Đồ thị")
         self.tabs.addTab(self.sensor_screen, "Quản lý Cảm biến")
         self.tabs.addTab(self.settings_screen, "Thiết lập")
+        self.tabs.addTab(self.advanced_analysis_screen, "Phân tích Chuyên sâu")
 
         self.layout.addWidget(self.tabs)
 
-        # Khởi tạo các thành phần xử lý dữ liệu
-        self.data_processor = DataProcessor()
-        self.plot_manager = PlotManager(self.display_screen, self.data_processor)
-
-        # Khởi tạo các biến quản lý kết nối
+        # Initialize connection management variables
         self.sensor_thread = None
         self.sensor_worker = None
         self.integrators = None
         self.dt_sensor_current = 0.005
         self.sample_frame_size_integrator = 20
 
-        # Kết nối signals
+        # Connect signals
         self.sensor_screen.connect_requested.connect(self.handle_connect_request)
         self.sensor_screen.disconnect_requested.connect(self.stop_sensor_data)
         self.settings_screen.display_rate_changed.connect(self.plot_manager.start_plotting)
 
-        # Khởi tạo tốc độ hiển thị ban đầu
+        # Initialize display rate
         self.plot_manager.start_plotting(self.settings_screen.get_current_display_rate())
 
     def initialize_integrators(self, dt_sensor):

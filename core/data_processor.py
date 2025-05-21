@@ -31,12 +31,16 @@ class DataProcessor:
             'y_freq': None, 'y_amp': None,
             'z_freq': None, 'z_amp': None
         }
+        self.dt_sensor_for_fft_analysis = 0.005  # Default value, will be updated when sensor connects
 
     def process_sensor_data(self, sensor_data_dict, integrators, dt_sensor, sample_frame_size):
         if not sensor_data_dict:
             return
 
         try:
+            # Update dt_sensor for FFT analysis
+            self.dt_sensor_for_fft_analysis = dt_sensor
+
             accX = sensor_data_dict.get("accX")
             accY = sensor_data_dict.get("accY")
             accZ = sensor_data_dict.get("accZ")
