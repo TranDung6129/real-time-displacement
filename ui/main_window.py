@@ -18,7 +18,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Ứng dụng Theo dõi Cảm biến Đa Tab - Multi Sensor")
+        self.setWindowTitle("AiLab")
         self.setGeometry(100, 100, 1700, 950) # Tăng kích thước một chút
 
         self.central_widget = QWidget()
