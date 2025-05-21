@@ -3,3 +3,4 @@ pyqtgraph>=0.13.3
 numpy>=1.21.0
 scipy>=1.7.0
 pyserial>=3.5 
+paho-mqtt>=1.6.0

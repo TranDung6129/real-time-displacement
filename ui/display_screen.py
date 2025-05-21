@@ -92,18 +92,18 @@ class DisplayScreenWidget(QWidget):
             self.curves_disp['z'].setData(plot_time_main, disp_data['z'][-n_points_main:])
 
         # Update FFT plots
-        if fft_data['x_freq'] is not None and fft_data['x_amp'] is not None:
-            self.curve_fft_x.setData(fft_data['x_freq'], fft_data['x_amp'])
+        if fft_data['x']['freq'] is not None and fft_data['x']['amp'] is not None:
+            self.curve_fft_x.setData(fft_data['x']['freq'], fft_data['x']['amp'])
         else:
             self.curve_fft_x.clear()
 
-        if fft_data['y_freq'] is not None and fft_data['y_amp'] is not None:
-            self.curve_fft_y.setData(fft_data['y_freq'], fft_data['y_amp'])
+        if fft_data['y']['freq'] is not None and fft_data['y']['amp'] is not None:
+            self.curve_fft_y.setData(fft_data['y']['freq'], fft_data['y']['amp'])
         else:
             self.curve_fft_y.clear()
 
-        if fft_data['z_freq'] is not None and fft_data['z_amp'] is not None:
-            self.curve_fft_z.setData(fft_data['z_freq'], fft_data['z_amp'])
+        if fft_data['z']['freq'] is not None and fft_data['z']['amp'] is not None:
+            self.curve_fft_z.setData(fft_data['z']['freq'], fft_data['z']['amp'])
         else:
             self.curve_fft_z.clear()
 

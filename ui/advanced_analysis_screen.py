@@ -48,15 +48,18 @@ class SelectFieldsDialog(QDialog):
     def populate_tree(self):
         self.tree_widget.clear()
         
-        # Lấy dữ liệu từ DataProcessor
-        plot_data = self.data_processor.get_plot_data()
+        # Lấy dữ liệu từ DataProcessor cho sensor hiện tại
+        if not hasattr(self, 'current_sensor_id') or not self.current_sensor_id:
+            return
+            
+        plot_data = self.data_processor.get_plot_data_for_sensor(self.current_sensor_id)
         if not plot_data:
             return
 
         # Tạo node cho dữ liệu gia tốc
         acc_node = QTreeWidgetItem(self.tree_widget, ["Gia tốc"])
         for axis in ['x', 'y', 'z']:
-            if f'acc_{axis}' in plot_data['acc_data']:
+            if axis in plot_data['acc_data']:
                 item = QTreeWidgetItem(acc_node, [f"Acc{axis.upper()}"])
                 item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
                 item.setCheckState(0, Qt.CheckState.Checked if f"Acc{axis.upper()}" in self.previously_selected_keys else Qt.CheckState.Unchecked)
@@ -64,7 +67,7 @@ class SelectFieldsDialog(QDialog):
         # Tạo node cho dữ liệu vận tốc
         vel_node = QTreeWidgetItem(self.tree_widget, ["Vận tốc"])
         for axis in ['x', 'y', 'z']:
-            if f'vel_{axis}' in plot_data['vel_data']:
+            if axis in plot_data['vel_data']:
                 item = QTreeWidgetItem(vel_node, [f"Vel{axis.upper()}"])
                 item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
                 item.setCheckState(0, Qt.CheckState.Checked if f"Vel{axis.upper()}" in self.previously_selected_keys else Qt.CheckState.Unchecked)
@@ -72,23 +75,18 @@ class SelectFieldsDialog(QDialog):
         # Tạo node cho dữ liệu chuyển vị
         disp_node = QTreeWidgetItem(self.tree_widget, ["Chuyển vị"])
         for axis in ['x', 'y', 'z']:
-            if f'disp_{axis}' in plot_data['disp_data']:
+            if axis in plot_data['disp_data']:
                 item = QTreeWidgetItem(disp_node, [f"Disp{axis.upper()}"])
                 item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
                 item.setCheckState(0, Qt.CheckState.Checked if f"Disp{axis.upper()}" in self.previously_selected_keys else Qt.CheckState.Unchecked)
 
         # Tạo node cho dữ liệu gia tốc thô (FFT)
         raw_acc_node = QTreeWidgetItem(self.tree_widget, ["Gia tốc thô (FFT)"])
-        raw_acc_fields = {
-            'acc_x_raw_for_fft': 'RawAccX_for_fft',
-            'acc_y_raw_for_fft': 'RawAccY_for_fft',
-            'acc_z_raw_for_fft': 'RawAccZ_for_fft'
-        }
-        for attr, field_name in raw_acc_fields.items():
-            if hasattr(self.data_processor, attr) and getattr(self.data_processor, attr).size > 0:
-                item = QTreeWidgetItem(raw_acc_node, [field_name])
+        for axis in ['x', 'y', 'z']:
+            if axis in plot_data['fft_data']:
+                item = QTreeWidgetItem(raw_acc_node, [f"RawAcc{axis.upper()}_for_fft"])
                 item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
-                item.setCheckState(0, Qt.CheckState.Checked if field_name in self.previously_selected_keys else Qt.CheckState.Unchecked)
+                item.setCheckState(0, Qt.CheckState.Checked if f"RawAcc{axis.upper()}_for_fft" in self.previously_selected_keys else Qt.CheckState.Unchecked)
 
         # Mở rộng tất cả các node
         for i in range(self.tree_widget.topLevelItemCount()):
@@ -179,6 +177,7 @@ class AdvancedAnalysisScreenWidget(QWidget):
     def __init__(self, data_processor, parent=None):
         super().__init__(parent)
         self.data_processor = data_processor
+        self.current_sensor_id = None  # Thêm biến để lưu sensor ID hiện tại
         self.current_data_snapshot = None
         self.selected_analysis_fields = []
         self.analysis_worker = None
@@ -334,7 +333,12 @@ class AdvancedAnalysisScreenWidget(QWidget):
 
 
     def load_and_analyze_data(self):
-        raw_data_from_dp = self.data_processor.get_plot_data()
+        if not self.current_sensor_id:
+            QMessageBox.warning(self, "Cảnh báo", "Chưa có sensor nào được chọn.")
+            self.clear_all_analysis_outputs()
+            return
+
+        raw_data_from_dp = self.data_processor.get_plot_data_for_sensor(self.current_sensor_id)
         if not raw_data_from_dp or not raw_data_from_dp['time_data'].size:
             self.current_data_snapshot = None
             QMessageBox.warning(self, "Cảnh báo", "Không có dữ liệu từ DataProcessor.")
@@ -367,21 +371,14 @@ class AdvancedAnalysisScreenWidget(QWidget):
                 else:
                     self.current_data_snapshot[field_name] = np.array([])
 
-
-        # Dữ liệu gia tốc thô cho FFT (lấy toàn bộ buffer có sẵn từ DP, rồi cắt sau nếu cần trong hàm FFT)
-        # Hoặc cắt luôn tại đây theo actual_num_points nếu logic FFT dùng số điểm đó
-        raw_acc_keys_map = {
-            'RawAccX_for_fft': self.data_processor.acc_x_raw_for_fft, #
-            'RawAccY_for_fft': self.data_processor.acc_y_raw_for_fft, #
-            'RawAccZ_for_fft': self.data_processor.acc_z_raw_for_fft  #
-        }
-        for key, raw_data_full in raw_acc_keys_map.items():
-            if len(raw_data_full) >= actual_num_points:
-                 self.current_data_snapshot[key] = np.copy(raw_data_full[-actual_num_points:])
-            elif len(raw_data_full) > 0:
-                 self.current_data_snapshot[key] = np.copy(raw_data_full)
-            else:
-                 self.current_data_snapshot[key] = np.array([])
+        # Dữ liệu gia tốc thô cho FFT
+        for axis in ['x', 'y', 'z']:
+            if axis in raw_data_from_dp['fft_data']:
+                field_name = f"RawAcc{axis.upper()}_for_fft"
+                if raw_data_from_dp['fft_data'][axis]['freq'] is not None:
+                    self.current_data_snapshot[field_name] = np.copy(raw_data_from_dp['fft_data'][axis]['freq'])
+                else:
+                    self.current_data_snapshot[field_name] = np.array([])
 
         print(f"Đã tải {actual_num_points} điểm dữ liệu để phân tích.")
         
@@ -392,7 +389,6 @@ class AdvancedAnalysisScreenWidget(QWidget):
         else:
             # Gọi lại để cập nhật combobox nếu selected_analysis_fields đã có từ trước
              self.update_selected_analysis_fields(self.selected_analysis_fields)
-
 
         self.on_tab_changed(self.analysis_tabs.currentIndex())
 
@@ -602,3 +598,8 @@ class AdvancedAnalysisScreenWidget(QWidget):
             self.fft_plot_widget.clear()
         self.fft_plot_widget.plot(fft_freq, fft_amp, pen='r')
         self.fft_plot_widget.setTitle(f"FFT của {field_name}")
+
+    def set_current_sensor(self, sensor_id):
+        """Cập nhật sensor ID hiện tại và load lại dữ liệu"""
+        self.current_sensor_id = sensor_id
+        self.load_and_analyze_data()
